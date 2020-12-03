@@ -39,6 +39,7 @@ from megatron.model.realm_model import ICTBertModel
 from megatron.utils import check_adlr_autoresume_termination
 from megatron.utils import make_data_loader
 from megatron.utils import report_memory
+from tensorboardX import SummaryWriter
 
 
 def pretrain(train_valid_test_dataset_provider, model_provider,
@@ -90,18 +91,19 @@ def pretrain(train_valid_test_dataset_provider, model_provider,
     print_rank_0('done with setups ...')
     timers.log(['model and optimizer', 'train/valid/test data iterators'])
     print_rank_0('training ...')
+    writer = SummaryWriter("tensorboard")
 
     iteration = 0
     if args.do_train and args.train_iters > 0:
         iteration = train(forward_step_func,
                           model, optimizer, lr_scheduler,
-                          train_data_iterator, valid_data_iterator)
+                          train_data_iterator, valid_data_iterator, writer)
 
     if args.do_valid:
         prefix = 'the end of training for val data'
         evaluate_and_print_results(prefix, forward_step_func,
                                    valid_data_iterator, model,
-                                   iteration, False)
+                                   iteration, writer, False)
 
     if args.save and iteration != 0:
         save_checkpoint(iteration, model, optimizer, lr_scheduler)
@@ -111,7 +113,7 @@ def pretrain(train_valid_test_dataset_provider, model_provider,
         prefix = 'the end of training for test data'
         evaluate_and_print_results(prefix, forward_step_func,
                                    test_data_iterator, model,
-                                   0, True)
+                                   0, writer, True)
 
 
 def get_model(model_provider_func):
@@ -300,11 +302,10 @@ def train_step(forward_step_func, data_iterator,
 
 
 def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
-                 loss_scale, report_memory_flag, skipped_iter):
+                 loss_scale, report_memory_flag, skipped_iter, writer):
     """Log training information such as losses, timing, ...."""
     args = get_args()
     timers = get_timers()
-    writer = get_tensorboard_writer()
 
     # Update losses.
     skipped_iters_key = 'skipped iterations'
@@ -391,7 +392,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
 
 
 def train(forward_step_func, model, optimizer, lr_scheduler,
-          train_data_iterator, valid_data_iterator):
+          train_data_iterator, valid_data_iterator, writer):
     """Train the model function."""
     args = get_args()
     timers = get_timers()
@@ -422,7 +423,8 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         report_memory_flag = training_log(loss_dict, total_loss_dict,
                                           optimizer.param_groups[0]['lr'],
                                           iteration, loss_scale,
-                                          report_memory_flag, skipped_iter)
+                                          report_memory_flag, skipped_iter,
+                                          writer)
 
         # Autoresume
         if args.adlr_autoresume and \
@@ -441,7 +443,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             prefix = 'iteration {}'.format(iteration)
             evaluate_and_print_results(prefix, forward_step_func,
                                        valid_data_iterator, model,
-                                       iteration, False)
+                                       iteration, writer, False)
 
         if args.exit_interval and iteration % args.exit_interval == 0:
             torch.distributed.barrier()
@@ -487,9 +489,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
 
 def evaluate_and_print_results(prefix, forward_step_func,
                                data_iterator, model,
-                               iteration, verbose=False):
-    """Helper function to evaluate and dump results on screen."""
-    writer = get_tensorboard_writer()
+                               iteration, writer, verbose=False):
 
     total_loss_dict = evaluate(forward_step_func, data_iterator, model, verbose)
     string = ' validation loss at {} | '.format(prefix)

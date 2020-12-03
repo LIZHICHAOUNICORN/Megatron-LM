@@ -17,10 +17,10 @@ DISTRIBUTED_ARGS="--nproc_per_node $GPUS_PER_NODE --nnodes $NNODES --node_rank $
 # --load $CHECKPOINT_PATH \
 python -m torch.distributed.launch $DISTRIBUTED_ARGS \
        pretrain_gpt2.py \
-       --model-parallel-size 1 \
-       --num-layers 24 \
-       --hidden-size 1024 \
-       --num-attention-heads 16 \
+       --model-parallel-size 2 \
+       --num-layers 32 \
+       --hidden-size 2560 \
+       --num-attention-heads 32 \
        --batch-size 8 \
        --seq-length 1024 \
        --max-position-embeddings 1024 \
@@ -31,7 +31,7 @@ python -m torch.distributed.launch $DISTRIBUTED_ARGS \
        --vocab-file tokenizer/vocab.json \
        --merge-file tokenizer/merges.txt \
        --data-impl mmap \
-       --split 949,50,1 \
+       --split 998,1,1 \
        --distributed-backend nccl \
        --lr 0.00015 \
        --lr-decay-style cosine \
@@ -43,7 +43,7 @@ python -m torch.distributed.launch $DISTRIBUTED_ARGS \
        --log-interval 100 \
        --save-interval 1000 \
        --eval-interval 1000 \
-       --eval-iters 10 \
+       --eval-iters 100 \
        --fp16
 
 set +x
